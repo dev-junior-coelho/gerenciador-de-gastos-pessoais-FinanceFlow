@@ -145,3 +145,16 @@ input[type='number'] {
 .animate-pulse-slow {
     animation: pulse-slow 8s ease-in-out infinite;
 }
+
+/* Scroll Utilities */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.overscroll-contain {
+    overscroll-behavior: contain;
+}

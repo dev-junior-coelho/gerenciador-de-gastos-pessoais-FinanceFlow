@@ -4,7 +4,7 @@ import {
     Zap, TrendingUp, Calendar, MoreVertical, X, Wallet,
     ChevronLeft, ChevronRight, Wifi, ArrowUpCircle, DollarSign,
     Save, PieChart, Target, LayoutDashboard, Menu, Bell,
-    Search, LogOut, Filter, Pencil, Smartphone
+    Search, LogOut, Filter, Pencil, Smartphone, Sparkles, Check
 } from 'lucide-react';
 import {
     PieChart as RePieChart, Pie, Cell, ResponsiveContainer, Tooltip
@@ -15,6 +15,111 @@ import {
     collection, addDoc, updateDoc, deleteDoc, doc, query, onSnapshot, orderBy
 } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+
+const PricingModal = ({ isOpen, onClose, isPremium }) => {
+    if (!isOpen) return null;
+
+    const plans = [
+        {
+            name: 'Membro Free',
+            price: 'R$ 0',
+            period: '/mês',
+            features: [
+                'Controle de Gastos Diários',
+                'Categorias de Gastos Básicas',
+                'Lançamentos Ilimitados',
+                'Resumo Mensal Visual'
+            ],
+            current: !isPremium,
+            buttonText: 'Plano Atual',
+            highlight: false
+        },
+        {
+            name: 'Assinante Premium',
+            price: 'R$ 19',
+            period: ',90/mês',
+            features: [
+                'Tudo do Plano Free',
+                'Sincronização em Nuvem em Tempo Real',
+                'Relatórios Avançados de Performance',
+                'IA Financeira para Sugestões',
+                'Filtros de Pagamento Exclusivos',
+                'Suporte Prioritário VIP'
+            ],
+            current: isPremium,
+            buttonText: isPremium ? 'Seu Plano Ativo' : 'Evoluir para o Pro',
+            highlight: true,
+            tag: 'Mais Popular'
+        }
+    ];
+
+    return (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-[#0b0914]/80 backdrop-blur-xl animate-fade-in" onClick={onClose} />
+            <div className="bg-[#151225] border border-white/10 rounded-[32px] w-full max-w-4xl p-8 lg:p-12 relative z-10 animate-fade-in-up overflow-y-auto max-h-[90vh] custom-scrollbar">
+                <button onClick={onClose} className="absolute top-6 right-6 p-2 rounded-xl hover:bg-white/5 text-slate-400 transition-colors">
+                    <X size={24} />
+                </button>
+
+                <div className="text-center mb-12 px-4">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[10px] font-black uppercase tracking-widest mb-4">
+                        <Sparkles size={12} /> Desbloqueie o próximo nível
+                    </div>
+                    <h2 className="text-3xl lg:text-5xl font-black text-white mb-4 tracking-tight leading-tight">Potencialize seu Controle Financeiro</h2>
+                    <p className="text-slate-400 text-base lg:text-lg max-w-2xl mx-auto">Escolha o plano que melhor se adapta ao seu estilo de vida e conquiste sua liberdade financeira.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 lg:gap-12 pb-4">
+                    {plans.map((plan) => (
+                        <div key={plan.name} className={`relative p-8 lg:p-10 rounded-[40px] border flex flex-col transition-all duration-500 hover:scale-[1.02] ${plan.highlight ? 'bg-gradient-to-b from-purple-600/10 to-transparent border-purple-500/30 ring-1 ring-purple-500/10 shadow-2xl shadow-purple-500/5' : 'bg-white/[0.02] border-white/5'}`}>
+                            {plan.tag && (
+                                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-[10px] font-black tracking-widest uppercase px-4 py-1.5 rounded-full shadow-lg shadow-purple-500/20">
+                                    {plan.tag}
+                                </span>
+                            )}
+                            <div className="mb-0">
+                                <h3 className="text-xl font-bold text-white mb-2">{plan.name}</h3>
+                                <div className="flex items-baseline gap-1 mb-8">
+                                    <span className="text-5xl font-black text-white tracking-tighter">{plan.price}</span>
+                                    <span className="text-slate-500 font-bold text-lg">{plan.period}</span>
+                                </div>
+                            </div>
+
+                            <ul className="space-y-5 mb-10 flex-1">
+                                {plan.features.map((feature) => (
+                                    <li key={feature} className="flex items-start gap-3.5 text-sm lg:text-base font-medium text-slate-300 leading-tight">
+                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${plan.highlight ? 'bg-purple-500/20 text-purple-400 border border-purple-500/10' : 'bg-slate-800 text-slate-500 border border-white/5'}`}>
+                                            <Check size={14} strokeWidth={3} />
+                                        </div>
+                                        {feature}
+                                    </li>
+                                ))}
+                            </ul>
+
+                            <button
+                                disabled={plan.current}
+                                onClick={() => {
+                                    if (!plan.current && plan.highlight) {
+                                        // Futura integração com Stripe/MercadoPago
+                                        alert('Simulação: Redirecionando para o Checkout...');
+                                    }
+                                }}
+                                className={`w-full py-5 rounded-[22px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-3 ${plan.current ? 'bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed' : plan.highlight ? 'hbo-button shadow-xl shadow-purple-600/20 hover:shadow-purple-600/40 text-sm' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10 text-sm'}`}
+                            >
+                                {plan.highlight && !plan.current && <Zap size={18} fill="currentColor" />}
+                                {plan.buttonText}
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                
+                <p className="text-center mt-12 text-[10px] font-bold text-slate-500 uppercase tracking-widest max-w-md mx-auto leading-relaxed">
+                    Pagamento 100% seguro processado via criptografia de ponta. Cancelamento fácil a qualquer momento.
+                </p>
+            </div>
+        </div>
+    );
+};
 
 const BASE_DATE = new Date();
 
@@ -43,13 +148,6 @@ const TYPE_MAP = {
     'one-time': { label: 'Avulso', color: 'text-slate-400', bg: 'bg-slate-400/10', border: 'border-slate-400/20' }
 };
 
-const PAYMENT_METHODS = {
-    credit: { label: 'Cartão de Crédito', icon: CreditCard, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
-    debit: { label: 'Cartão de Débito', icon: Wallet, color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
-    pix: { label: 'Pix', icon: Smartphone, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
-    cash: { label: 'Dinheiro', icon: DollarSign, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-    others: { label: 'Outros', icon: MoreVertical, color: 'text-slate-400', bg: 'bg-white/5', border: 'border-white/10' }
-};
 
 export default function App() {
     const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -105,7 +203,8 @@ export default function App() {
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [filterType, setFilterType] = useState('all');
-    const [filterPayment, setFilterPayment] = useState('all');
+    const [isPremium, setIsPremium] = useState(false);
+    const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -115,8 +214,7 @@ export default function App() {
         type: 'fixed',
         current: 1,
         total: 12,
-        category: 'others',
-        paymentMethod: 'credit'
+        category: 'others'
     });
 
     useEffect(() => {
@@ -139,15 +237,37 @@ export default function App() {
 
     useEffect(() => {
         const handleResize = () => {
-            if (window.innerWidth >= 1024) {
-                setIsSidebarOpen(true);
-            } else {
-                setIsSidebarOpen(false);
-            }
+            setIsSidebarOpen(window.innerWidth >= 1024);
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
+
+    // Bloquear scroll do fundo de forma robusta para Mobile/iOS
+    useEffect(() => {
+        if (isSidebarOpen && window.innerWidth < 1024) {
+            const scrollY = window.scrollY;
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflow = 'hidden';
+        } else {
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0') * -1);
+            }
+        }
+        return () => {
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+        };
+    }, [isSidebarOpen]);
 
     const getMonthKey = (date) => `${date.getFullYear()}-${date.getMonth()}`;
     const currentMonthKey = getMonthKey(selectedDate);
@@ -222,12 +342,8 @@ export default function App() {
             }
         }
 
-        if (filterPayment !== 'all') {
-            list = list.filter(e => (e.paymentMethod || 'credit') === filterPayment);
-        }
-
         return list;
-    }, [currentMonthExpenses, filterType, filterPayment]);
+    }, [currentMonthExpenses, filterType]);
 
     const handleDelete = async (id) => {
         if (!user) return;
@@ -251,8 +367,7 @@ export default function App() {
             type: original.type,
             current: original.current || 1,
             total: original.total || 12,
-            category: original.category,
-            paymentMethod: original.paymentMethod || 'credit'
+            category: original.category
         });
         setIsModalOpen(true);
     };
@@ -266,7 +381,6 @@ export default function App() {
             value: parseFloat(formData.value),
             type: formData.type,
             category: formData.category,
-            paymentMethod: formData.paymentMethod,
             ...(formData.type === 'installment' && {
                 current: parseInt(formData.current),
                 total: parseInt(formData.total)
@@ -284,7 +398,7 @@ export default function App() {
             }
             setIsModalOpen(false);
             setEditingId(null);
-            setFormData({ name: '', value: '', type: 'fixed', current: 1, total: 12, category: 'others', paymentMethod: 'credit' });
+            setFormData({ name: '', value: '', type: 'fixed', current: 1, total: 12, category: 'others' });
         } catch (error) {
             console.error("Error saving expense:", error);
         }
@@ -334,15 +448,15 @@ export default function App() {
 
             {isSidebarOpen && (
                 <div
-                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden animate-fade-in-up"
+                    className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden animate-fade-in-up touch-none"
                     onClick={() => setIsSidebarOpen(false)}
                 />
             )}
 
             {/* SIDEBAR */}
             <aside className={`fixed inset-y-0 left-0 z-[70] w-72 border-r transition-all duration-300 ease-in-out lg:relative lg:translate-x-0 backdrop-blur-2xl ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} ${isDarkMode ? 'bg-black/20 border-white/5' : 'bg-white/80 border-slate-200 shadow-2xl shadow-slate-200/50'}`}>
-                <div className="flex flex-col h-full p-6 relative z-10">
-                    <div className="flex items-center justify-between mb-10 px-2 lg:justify-start">
+                <div className="flex flex-col h-full p-6 relative z-10 overflow-y-auto no-scrollbar overscroll-contain">
+                    <div className="flex items-center justify-between mb-10 px-2 lg:justify-start shrink-0">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20">
                                 <Zap size={20} className="text-white fill-white/20" />
@@ -358,7 +472,7 @@ export default function App() {
                         </button>
                     </div>
 
-                    <nav className="flex-1 space-y-2">
+                    <nav className="flex-1 space-y-2 pr-1">
                         <div className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Monitoramento</div>
                         <button
                             onClick={() => { setFilterType('all'); setIsSidebarOpen(false); }}
@@ -378,41 +492,36 @@ export default function App() {
                         >
                             <CreditCard size={18} className={filterType === 'installment' ? 'text-purple-400' : ''} /> <span>Acompanhar Parcelas</span>
                         </button>
-
-                        <div className={`text-[10px] font-bold uppercase tracking-widest px-4 pt-6 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Meio de Pagamento</div>
-                        <button
-                            onClick={() => { setFilterPayment('all'); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${filterPayment === 'all' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-slate-300'}`}
-                        >
-                            Todos os Meios
-                        </button>
-                        {Object.entries(PAYMENT_METHODS).map(([key, config]) => (
-                            <button
-                                key={key}
-                                onClick={() => { setFilterPayment(key); setIsSidebarOpen(false); }}
-                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${filterPayment === key ? `${config.bg} ${config.color}` : 'text-slate-500 hover:text-slate-300'}`}
-                            >
-                                <config.icon size={14} /> {config.label}
-                            </button>
-                        ))}
                     </nav>
 
-                    <div className="pt-6 border-t mt-auto space-y-4 border-white/5">
-                        <div className={`flex items-center gap-3 p-4 rounded-2xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center font-black text-sm text-white shadow-inner shrink-0">
-                                {user?.displayName?.charAt(0) || 'U'}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <p className={`text-sm font-bold truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{user?.displayName?.split(' ')[0] || 'Usuário'}</p>
-                                <p className="text-[10px] text-purple-400 truncate font-bold uppercase tracking-widest">Premium Assiant</p>
-                            </div>
-                            <button className={`p-2 rounded-xl transition-colors shrink-0 ${isDarkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-rose-500/10' : 'text-slate-500 hover:text-slate-900 hover:bg-white'}`} onClick={handleLogout} title="Sair do sistema">
-                                <LogOut size={16} />
-                            </button>
+                <div className="pt-6 border-t mt-auto space-y-4 border-white/5">
+                    {!isPremium && (
+                        <button
+                            onClick={() => setIsPricingModalOpen(true)}
+                            className="w-full flex items-center justify-center gap-2 group p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-indigo-600/20 border border-purple-500/30 hover:bg-purple-500/30 transition-all duration-300 shadow-lg shadow-purple-500/10 group"
+                        >
+                            <Sparkles size={16} className="text-purple-400 group-hover:animate-bounce" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.15em] text-white">Upgrade to PRO</span>
+                        </button>
+                    )}
+
+                    <div className={`flex items-center gap-3 p-4 rounded-2xl border transition-all ${isDarkMode ? 'bg-white/5 border-white/5 hover:bg-white/10' : 'bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center font-black text-sm text-white shadow-inner shrink-0">
+                            {user?.displayName?.charAt(0) || 'U'}
                         </div>
+                        <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-bold truncate ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>{user?.displayName?.split(' ')[0] || 'Usuário'}</p>
+                            <p className={`text-[10px] truncate font-bold uppercase tracking-widest ${isPremium ? 'text-purple-400' : 'text-slate-500'}`}>
+                                {isPremium ? 'Assinante Premium' : 'Membro Free'}
+                            </p>
+                        </div>
+                        <button className={`p-2 rounded-xl transition-colors shrink-0 ${isDarkMode ? 'text-slate-400 hover:text-rose-400 hover:bg-rose-500/10' : 'text-slate-500 hover:text-slate-900 hover:bg-white'}`} onClick={handleLogout} title="Sair do sistema">
+                            <LogOut size={16} />
+                        </button>
                     </div>
                 </div>
-            </aside>
+            </div>
+        </aside>
 
             {/* MAIN CONTENT AREA */}
             <div className="flex-1 h-screen overflow-y-auto relative scroll-smooth bg-transparent px-2 lg:px-0">
@@ -572,8 +681,6 @@ export default function App() {
                                     <div className="space-y-3">
                                         {filteredDisplayList.map((item) => {
                                             const Config = CATEGORY_MAP[item.category] || CATEGORY_MAP.others;
-                                            const PaymentConfig = PAYMENT_METHODS[item.paymentMethod || 'credit'];
-                                            const PaymentIcon = PaymentConfig.icon;
                                             const progress = item.total ? (item.current / item.total) * 100 : 0;
                                             const remaining = item.total ? (item.total - item.current) * item.value : 0;
 
@@ -595,9 +702,6 @@ export default function App() {
                                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                                         <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shadow-sm ${TYPE_MAP[item.type].bg} ${TYPE_MAP[item.type].color} ${TYPE_MAP[item.type].border}`}>
                                                                             {TYPE_MAP[item.type].label}
-                                                                        </span>
-                                                                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shadow-sm flex items-center gap-1 ${PaymentConfig.bg} ${PaymentConfig.color} ${PaymentConfig.border}`}>
-                                                                            <PaymentIcon size={8} /> {PaymentConfig.label}
                                                                         </span>
                                                                         {item.type === 'installment' && (
                                                                             <span className="text-[9px] font-bold text-slate-400 border border-white/10 bg-white/5 px-1.5 py-0.5 rounded">
@@ -837,25 +941,6 @@ export default function App() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2 pt-2">
-                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Meio de Pagamento</label>
-                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-1.5 rounded-2xl bg-white/[0.02] border border-white/5">
-                                    {Object.entries(PAYMENT_METHODS).map(([key, config]) => {
-                                        const Icon = config.icon;
-                                        const isSelected = formData.paymentMethod === key;
-                                        return (
-                                            <button
-                                                key={key} type="button"
-                                                onClick={() => setFormData({ ...formData, paymentMethod: key })}
-                                                className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl transition-all border ${isSelected ? `${config.bg} ${config.color} ${config.border} shadow-sm` : 'text-slate-500 hover:text-slate-300 border-transparent bg-transparent'}`}
-                                            >
-                                                <Icon size={16} />
-                                                <span className="text-[10px] font-bold uppercase tracking-tight">{config.label.split(' ')[0]}</span>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
 
                             <div className="space-y-2 pt-2">
                                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Natureza da Transação</label>
@@ -902,6 +987,7 @@ export default function App() {
                     </div>
                 </div>
             )}
+            <PricingModal isOpen={isPricingModalOpen} onClose={() => setIsPricingModalOpen(false)} isPremium={isPremium} />
         </div>
     );
 }
