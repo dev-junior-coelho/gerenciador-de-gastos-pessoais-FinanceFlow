@@ -43,6 +43,14 @@ const TYPE_MAP = {
     'one-time': { label: 'Avulso', color: 'text-slate-400', bg: 'bg-slate-400/10', border: 'border-slate-400/20' }
 };
 
+const PAYMENT_METHODS = {
+    credit: { label: 'Cartão de Crédito', icon: CreditCard, color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+    debit: { label: 'Cartão de Débito', icon: Wallet, color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
+    pix: { label: 'Pix', icon: Smartphone, color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+    cash: { label: 'Dinheiro', icon: DollarSign, color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+    others: { label: 'Outros', icon: MoreVertical, color: 'text-slate-400', bg: 'bg-white/5', border: 'border-white/10' }
+};
+
 export default function App() {
     const [isDarkMode, setIsDarkMode] = useState(() => {
         if (typeof window !== 'undefined') {
@@ -97,6 +105,7 @@ export default function App() {
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [filterType, setFilterType] = useState('all');
+    const [filterPayment, setFilterPayment] = useState('all');
     const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth >= 1024);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState(null);
@@ -106,7 +115,8 @@ export default function App() {
         type: 'fixed',
         current: 1,
         total: 12,
-        category: 'others'
+        category: 'others',
+        paymentMethod: 'credit'
     });
 
     useEffect(() => {
@@ -202,10 +212,22 @@ export default function App() {
     }, [currentMonthExpenses, currentIncome]);
 
     const filteredDisplayList = useMemo(() => {
-        if (filterType === 'all') return currentMonthExpenses;
-        if (filterType === 'fixed') return currentMonthExpenses.filter(e => e.type === 'fixed' || e.type === 'one-time');
-        return currentMonthExpenses.filter(e => e.type === filterType);
-    }, [currentMonthExpenses, filterType]);
+        let list = [...currentMonthExpenses];
+        
+        if (filterType !== 'all') {
+            if (filterType === 'fixed') {
+                list = list.filter(e => e.type === 'fixed' || e.type === 'one-time');
+            } else {
+                list = list.filter(e => e.type === filterType);
+            }
+        }
+
+        if (filterPayment !== 'all') {
+            list = list.filter(e => (e.paymentMethod || 'credit') === filterPayment);
+        }
+
+        return list;
+    }, [currentMonthExpenses, filterType, filterPayment]);
 
     const handleDelete = async (id) => {
         if (!user) return;
@@ -229,7 +251,8 @@ export default function App() {
             type: original.type,
             current: original.current || 1,
             total: original.total || 12,
-            category: original.category
+            category: original.category,
+            paymentMethod: original.paymentMethod || 'credit'
         });
         setIsModalOpen(true);
     };
@@ -243,6 +266,7 @@ export default function App() {
             value: parseFloat(formData.value),
             type: formData.type,
             category: formData.category,
+            paymentMethod: formData.paymentMethod,
             ...(formData.type === 'installment' && {
                 current: parseInt(formData.current),
                 total: parseInt(formData.total)
@@ -260,7 +284,7 @@ export default function App() {
             }
             setIsModalOpen(false);
             setEditingId(null);
-            setFormData({ name: '', value: '', type: 'fixed', current: 1, total: 12, category: 'others' });
+            setFormData({ name: '', value: '', type: 'fixed', current: 1, total: 12, category: 'others', paymentMethod: 'credit' });
         } catch (error) {
             console.error("Error saving expense:", error);
         }
@@ -354,6 +378,23 @@ export default function App() {
                         >
                             <CreditCard size={18} className={filterType === 'installment' ? 'text-purple-400' : ''} /> <span>Acompanhar Parcelas</span>
                         </button>
+
+                        <div className={`text-[10px] font-bold uppercase tracking-widest px-4 pt-6 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Meio de Pagamento</div>
+                        <button
+                            onClick={() => { setFilterPayment('all'); setIsSidebarOpen(false); }}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${filterPayment === 'all' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-slate-300'}`}
+                        >
+                            Todos os Meios
+                        </button>
+                        {Object.entries(PAYMENT_METHODS).map(([key, config]) => (
+                            <button
+                                key={key}
+                                onClick={() => { setFilterPayment(key); setIsSidebarOpen(false); }}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${filterPayment === key ? `${config.bg} ${config.color}` : 'text-slate-500 hover:text-slate-300'}`}
+                            >
+                                <config.icon size={14} /> {config.label}
+                            </button>
+                        ))}
                     </nav>
 
                     <div className="pt-6 border-t mt-auto space-y-4 border-white/5">
@@ -531,6 +572,8 @@ export default function App() {
                                     <div className="space-y-3">
                                         {filteredDisplayList.map((item) => {
                                             const Config = CATEGORY_MAP[item.category] || CATEGORY_MAP.others;
+                                            const PaymentConfig = PAYMENT_METHODS[item.paymentMethod || 'credit'];
+                                            const PaymentIcon = PaymentConfig.icon;
                                             const progress = item.total ? (item.current / item.total) * 100 : 0;
                                             const remaining = item.total ? (item.total - item.current) * item.value : 0;
 
@@ -552,6 +595,9 @@ export default function App() {
                                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                                         <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shadow-sm ${TYPE_MAP[item.type].bg} ${TYPE_MAP[item.type].color} ${TYPE_MAP[item.type].border}`}>
                                                                             {TYPE_MAP[item.type].label}
+                                                                        </span>
+                                                                        <span className={`text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded border shadow-sm flex items-center gap-1 ${PaymentConfig.bg} ${PaymentConfig.color} ${PaymentConfig.border}`}>
+                                                                            <PaymentIcon size={8} /> {PaymentConfig.label}
                                                                         </span>
                                                                         {item.type === 'installment' && (
                                                                             <span className="text-[9px] font-bold text-slate-400 border border-white/10 bg-white/5 px-1.5 py-0.5 rounded">
@@ -788,6 +834,26 @@ export default function App() {
                                             <option key={key} value={key} className="bg-slate-900 text-white font-bold">{config.label}</option>
                                         ))}
                                     </select>
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 pt-2">
+                                <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Meio de Pagamento</label>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 p-1.5 rounded-2xl bg-white/[0.02] border border-white/5">
+                                    {Object.entries(PAYMENT_METHODS).map(([key, config]) => {
+                                        const Icon = config.icon;
+                                        const isSelected = formData.paymentMethod === key;
+                                        return (
+                                            <button
+                                                key={key} type="button"
+                                                onClick={() => setFormData({ ...formData, paymentMethod: key })}
+                                                className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl transition-all border ${isSelected ? `${config.bg} ${config.color} ${config.border} shadow-sm` : 'text-slate-500 hover:text-slate-300 border-transparent bg-transparent'}`}
+                                            >
+                                                <Icon size={16} />
+                                                <span className="text-[10px] font-bold uppercase tracking-tight">{config.label.split(' ')[0]}</span>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
