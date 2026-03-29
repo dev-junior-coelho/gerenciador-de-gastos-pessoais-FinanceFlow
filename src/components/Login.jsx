@@ -1,15 +1,31 @@
 import React from 'react';
-import { signInWithPopup } from 'firebase/auth';
+import { signInWithPopup, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import { Capacitor } from '@capacitor/core';
+import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Zap, ShieldCheck, PieChart, TrendingUp, Sparkles } from 'lucide-react';
 
 export default function Login() {
     const handleGoogleLogin = async () => {
         try {
-            await signInWithPopup(auth, googleProvider);
+            if (Capacitor.isNativePlatform()) {
+                await FirebaseAuthentication.signOut().catch(() => {});
+                
+                const result = await FirebaseAuthentication.signInWithGoogle({
+                    webClientId: '1013466792204-d3pi5nc2jud6oas8473h68d5topb3kr0.apps.googleusercontent.com'
+                });
+                
+                const idToken = result.idToken || (result.credential && result.credential.idToken);
+                
+                if (idToken) {
+                    const credential = GoogleAuthProvider.credential(idToken);
+                    await signInWithCredential(auth, credential);
+                }
+            } else {
+                await signInWithPopup(auth, googleProvider);
+            }
         } catch (error) {
-            console.error("Erro ao fazer login com Google:", error);
-            alert("Erro ao conectar com Google. Verifique se o pop-up foi bloqueado.");
+            console.error("Erro no login:", error);
         }
     };
 
@@ -28,7 +44,7 @@ export default function Login() {
                     </div>
                     <div>
                         <h1 className="text-2xl font-black tracking-tight text-white">
-                            FinanceFlow
+                            Equilibra<span className="text-gradient">+</span>
                         </h1>
                     </div>
                 </div>
@@ -78,7 +94,7 @@ export default function Login() {
                             <Zap size={24} className="text-white" />
                         </div>
                         <h1 className="text-3xl font-black tracking-tight text-white">
-                            FinanceFlow
+                            Equilibra<span className="text-gradient">+</span>
                         </h1>
                     </div>
 

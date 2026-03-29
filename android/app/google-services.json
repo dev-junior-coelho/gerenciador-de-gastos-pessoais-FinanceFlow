@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "1013466792204",
+    "project_id": "financeflow-btpbp",
+    "storage_bucket": "financeflow-btpbp.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1013466792204:android:154d7f16ac0b0e997e4929",
+        "android_client_info": {
+          "package_name": "com.lupsolucoesinteligentes.equilibraplus"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1013466792204-dn4foq8fsud5tcvq9vnia9rcmdur2tri.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lupsolucoesinteligentes.equilibraplus",
+            "certificate_hash": "320d40cb925017a564dead9297d66aee5c2857b5"
+          }
+        },
+        {
+          "client_id": "1013466792204-d3pi5nc2jud6oas8473h68d5topb3kr0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWbpRuXFQr-kNJxzEgzTVF4NMTkLnV__E"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1013466792204-d3pi5nc2jud6oas8473h68d5topb3kr0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,12 @@
+{
+  "appId": "com.lupsolucoesinteligentes.equilibraplus",
+  "appName": "Equilibra+",
+  "webDir": "dist",
+  "plugins": {
+    "FirebaseAuthentication": {
+      "skipNativeAuth": false,
+      "providers": ["google.com"],
+      "googleClientId": "1013466792204-d3pi5nc2jud6oas8473h68d5topb3kr0.apps.googleusercontent.com"
+    }
+  }
+}

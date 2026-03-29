@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "financeflow-btpbp",
+    "site": "equilibra-mais",
     "public": "dist",
     "ignore": [
       "firebase.json",
