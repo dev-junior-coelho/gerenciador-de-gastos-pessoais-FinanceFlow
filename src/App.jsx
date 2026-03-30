@@ -150,12 +150,7 @@ const CategoryReportModal = ({ isOpen, onClose, category, expenses, selectedDate
     if (!isOpen || !category) return null;
 
     const config = CATEGORY_MAP[category];
-    const categoryExpenses = expenses.filter(e => {
-        const d = new Date(e.date);
-        return e.category === category &&
-            d.getMonth() === selectedDate.getMonth() &&
-            d.getFullYear() === selectedDate.getFullYear();
-    });
+    const categoryExpenses = expenses.filter(e => e.category === category);
 
     const total = categoryExpenses.reduce((sum, e) => sum + e.value, 0);
 
@@ -309,11 +304,11 @@ function App() {
         value: '',
         totalValue: '',
         type: 'fixed',
-        current: 1,
-        total: 12,
-        paidCount: 0,
-        category: 'others',
-        dueDay: new Date().getDate().toString()
+        total: '',
+        paidCount: '',
+        category: '',
+        dueDay: '',
+        inputMode: 'total'
     });
 
     useEffect(() => {
@@ -444,6 +439,10 @@ function App() {
     const stats = useMemo(() => {
         const totalMonthly = currentMonthExpenses.reduce((acc, item) => acc + item.value, 0);
 
+        const fixedTotal = currentMonthExpenses.filter(e => e.type === 'fixed').reduce((acc, e) => acc + e.value, 0);
+        const oneTimeTotal = currentMonthExpenses.filter(e => e.type === 'one-time').reduce((acc, e) => acc + e.value, 0);
+        const installmentTotal = currentMonthExpenses.filter(e => e.type === 'installment').reduce((acc, e) => acc + e.value, 0);
+
         const chartData = Object.entries(CATEGORY_MAP).map(([key, config]) => {
             const value = currentMonthExpenses
                 .filter(e => e.category === key)
@@ -460,7 +459,7 @@ function App() {
         const balance = incomeVal - totalMonthly;
         const expenseRatio = incomeVal > 0 ? (totalMonthly / incomeVal) * 100 : 0;
 
-        return { totalMonthly, balance, income: incomeVal, expenseRatio, chartData };
+        return { totalMonthly, balance, income: incomeVal, expenseRatio, chartData, fixedTotal, oneTimeTotal, installmentTotal };
     }, [currentMonthExpenses, currentIncome]);
 
     const notifications = useMemo(() => {
@@ -538,10 +537,11 @@ function App() {
             totalValue: (original.totalValue || (original.value * (original.total || 1))).toString(),
             type: original.type,
             current: projectedCurrent,
-            total: original.total || 12,
+            total: original.total || '',
             paidCount: projectedCurrent - 1, // quantas já foram pagas
-            category: original.category,
-            dueDay: original.dueDay || new Date().getDate().toString()
+            category: original.category || '',
+            dueDay: original.dueDay || '',
+            inputMode: 'total'
         });
         setIsModalOpen(true);
     };
@@ -549,50 +549,51 @@ function App() {
     const handleAddExpense = async (e) => {
         e.preventDefault();
         if (!user) return;
+        
+        if (!formData.category) {
+            alert("Por favor, selecione uma categoria para o gasto.");
+            return;
+        }
+        
+        if ((formData.type === 'installment' || formData.type === 'fixed') && !formData.dueDay) {
+            alert("Por favor, informe o dia do vencimento.");
+            return;
+        }
 
         let calculatedValue = parseFloat(formData.value) || 0;
         let startCurrentForSave = 1;  // current da parcela que ficará salva no banco
         let expenseSaveDate;
 
+        const today = new Date();
+        const todayDay = today.getDate();
+        const dueDayInt = parseInt(formData.dueDay);
+        const closingDay = dueDayInt - 10;
+        let effectiveDate = new Date();
+        
+        if (!isNaN(closingDay) && todayDay > closingDay) {
+            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+        }
+
         if (formData.type === 'installment') {
             const total = parseInt(formData.total) || 12;
-            const totalVal = parseFloat(formData.totalValue) || 0;
             
-            if (totalVal > 0 && calculatedValue === 0) {
+            if (formData.inputMode === 'installment') {
+                calculatedValue = parseFloat(formData.value) || 0;
+            } else {
+                const totalVal = parseFloat(formData.totalValue) || 0;
                 calculatedValue = totalVal / total;
             }
 
-            // REGRA FUNDAMENTAL: item.current é SEMPRE 1 (primeiro mês).
-            // A projeção é calculada como: projectedCurrent = 1 + (mêsAtual - mêsInício)
-            // Então para controlar em qual parcela estamos hoje, ajustamos apenas a data de início.
-            //
-            // paidCount = parcelas JÁ PAGAS antes do mês atual
-            // 0 pagas → date = hoje       → Março = 1 + 0 = 1/12 ✓
-            // 3 pagas → date = 3 meses atrás → Março = 1 + 3 = 4/12 ✓
-            startCurrentForSave = 1; // SEMPRE 1
+            startCurrentForSave = 1;
 
             const paid = Math.max(0, parseInt(formData.paidCount || 0));
-            const refDate = new Date();
-            refDate.setDate(1);
+            const refDate = new Date(effectiveDate); // Apply closing date rule first
+            refDate.setDate(1); // avoid jumping months on days like 31
             refDate.setMonth(refDate.getMonth() - paid);
             refDate.setDate(parseInt(formData.dueDay) || 1);
             expenseSaveDate = refDate.toISOString();
         }
 
-        const today = new Date();
-        const todayDay = today.getDate();
-        const dueDayInt = parseInt(formData.dueDay);
-
-        // INTELIGÊNCIA DE FATURA: Fechamento aproximado de 10 dias
-        const closingDay = dueDayInt - 10;
-        let effectiveDate = new Date();
-        
-        // Se a compra foi feita após o fechamento ou após o vencimento, cai no próximo mês
-        if (todayDay > closingDay) {
-            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
-        }
-
-        // Para parcelados, sempre usa a data recalculada acima
         const finalDate = (formData.type === 'installment' && expenseSaveDate)
             ? expenseSaveDate
             : effectiveDate.toISOString();
@@ -605,7 +606,9 @@ function App() {
             ...(formData.type === 'installment' && {
                 current: startCurrentForSave,
                 total: parseInt(formData.total),
-                totalValue: parseFloat(formData.totalValue) || calculatedValue * parseInt(formData.total)
+                totalValue: formData.inputMode === 'installment' 
+                    ? calculatedValue * parseInt(formData.total) 
+                    : (parseFloat(formData.totalValue) || calculatedValue * parseInt(formData.total))
             }),
             dueDay: formData.dueDay,
             date: finalDate,
@@ -622,12 +625,7 @@ function App() {
             }
             setIsModalOpen(false);
             setEditingId(null);
-            setFormData({ name: '', value: '', totalValue: '', type: 'fixed', current: 1, total: 12, category: 'others', dueDay: new Date().getDate().toString() });
-
-            // Se o sistema jogou para o próximo mês de forma inteligente, avance a tela para o usuário ver o lançamento salvo!
-            if (todayDay > closingDay && (formData.type === 'installment' || formData.type === 'fixed')) {
-                changeMonth(1);
-            }
+            setFormData({ name: '', value: '', totalValue: '', type: 'fixed', current: 1, total: '', paidCount: '', category: '', dueDay: '', inputMode: 'total' });
         } catch (error) {
             console.error("Error saving expense:", error);
         }
@@ -640,11 +638,11 @@ function App() {
             value: '', 
             totalValue: '',
             type: 'fixed', 
-            current: 1, 
-            total: 12, 
-            paidCount: 0,
-            category: 'others',
-            dueDay: ''
+            total: '', 
+            paidCount: '',
+            category: '',
+            dueDay: '',
+            inputMode: 'total'
         });
         setIsModalOpen(true);
     };
@@ -717,9 +715,14 @@ function App() {
                         <div className={`text-[10px] font-bold uppercase tracking-widest px-4 mb-4 ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>Monitoramento</div>
                         <button
                             onClick={() => { setFilterType('all'); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'all' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
+                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'all' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
                         >
-                            <LayoutDashboard size={18} className={filterType === 'all' ? 'text-purple-400' : ''} /> <span>Visão Geral</span>
+                            <div className="flex items-center gap-3">
+                                <LayoutDashboard size={18} className={filterType === 'all' ? 'text-purple-400' : ''} /> <span>Visão Geral</span>
+                            </div>
+                            <span className={`text-[10px] font-black tracking-tight ${filterType === 'all' ? 'text-white' : (isDarkMode ? 'text-slate-500' : 'text-slate-400')}`}>
+                                {formatMoney(stats.totalMonthly)}
+                            </span>
                         </button>
                         
                         <div className="pt-6 pb-2">
@@ -727,21 +730,36 @@ function App() {
                         </div>
                         <button
                             onClick={() => { setFilterType('fixed'); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'fixed' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
+                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'fixed' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
                         >
-                            <Target size={18} className={filterType === 'fixed' ? 'text-purple-400' : ''} /> <span>Gastos Fixos</span>
+                            <div className="flex items-center gap-3">
+                                <Target size={18} className={filterType === 'fixed' ? 'text-purple-400' : ''} /> <span>Gastos Fixos</span>
+                            </div>
+                            <span className={`text-[10px] font-black tracking-tight ${filterType === 'fixed' ? 'text-white' : (isDarkMode ? 'text-slate-500' : 'text-slate-400')}`}>
+                                {formatMoney(stats.fixedTotal)}
+                            </span>
                         </button>
                         <button
                             onClick={() => { setFilterType('one-time'); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'one-time' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
+                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'one-time' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
                         >
-                            <Calendar size={18} className={filterType === 'one-time' ? 'text-purple-400' : ''} /> <span>Gastos Avulsos</span>
+                            <div className="flex items-center gap-3">
+                                <Calendar size={18} className={filterType === 'one-time' ? 'text-purple-400' : ''} /> <span>Gastos Avulsos</span>
+                            </div>
+                            <span className={`text-[10px] font-black tracking-tight ${filterType === 'one-time' ? 'text-white' : (isDarkMode ? 'text-slate-500' : 'text-slate-400')}`}>
+                                {formatMoney(stats.oneTimeTotal)}
+                            </span>
                         </button>
                         <button
                             onClick={() => { setFilterType('installment'); setIsSidebarOpen(false); }}
-                            className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'installment' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
+                            className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm font-semibold transition-all duration-200 ${filterType === 'installment' ? 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-white border border-purple-500/20 shadow-inner' : isDarkMode ? 'text-slate-400 hover:text-white hover:bg-white/5 border border-transparent' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'}`}
                         >
-                            <CreditCard size={18} className={filterType === 'installment' ? 'text-purple-400' : ''} /> <span>Acompanhar Parcelas</span>
+                            <div className="flex items-center gap-3">
+                                <CreditCard size={18} className={filterType === 'installment' ? 'text-purple-400' : ''} /> <span>Acompanhar Parcelas</span>
+                            </div>
+                            <span className={`text-[10px] font-black tracking-tight ${filterType === 'installment' ? 'text-white' : (isDarkMode ? 'text-slate-500' : 'text-slate-400')}`}>
+                                {formatMoney(stats.installmentTotal)}
+                            </span>
                         </button>
                     </nav>
 
@@ -1143,10 +1161,10 @@ function App() {
             {/* MODAL / BOTTOM SHEET */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-end lg:items-center justify-center p-0 lg:p-4 animate-fade-in-up">
-                    <div className="w-full lg:max-w-2xl bg-[#0b0914]/90 backdrop-blur-2xl rounded-t-[2rem] lg:rounded-[2rem] overflow-hidden border border-white/10 shadow-2xl relative">
+                    <div className="w-full lg:max-w-2xl bg-[#0b0914]/90 backdrop-blur-2xl rounded-t-[2rem] lg:rounded-[2rem] border border-white/10 shadow-2xl relative flex flex-col max-h-[90svh]">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-purple-600/10 rounded-full blur-[80px] pointer-events-none"></div>
 
-                        <div className="p-6 lg:p-8 border-b border-white/5 flex justify-between items-center relative z-10">
+                        <div className="shrink-0 p-5 lg:p-6 border-b border-white/5 flex justify-between items-center relative z-10 rounded-t-[2rem]">
                             <div className="flex items-center gap-4">
                                 <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-500/20 text-white">
                                     {editingId ? <Pencil size={20} /> : <Plus size={24} />}
@@ -1161,12 +1179,12 @@ function App() {
                             </button>
                         </div>
 
-                        <form onSubmit={handleAddExpense} className="p-6 lg:p-8 space-y-6 max-h-[80vh] overflow-y-auto relative z-10">
+                        <form onSubmit={handleAddExpense} className="flex-1 p-5 lg:p-6 space-y-5 overflow-y-auto relative z-10">
                             <div className="space-y-2">
                                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">Especificação do Gasto</label>
                                 <input
                                     required type="text"
-                                    className="hbo-input w-full p-4 font-bold text-lg"
+                                    className="hbo-input w-full p-3 font-bold text-sm"
                                     placeholder="Ex: Aluguel do Escritório"
                                     value={formData.name}
                                     onChange={e => setFormData({ ...formData, name: e.target.value })}
@@ -1175,28 +1193,49 @@ function App() {
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1">
-                                        {formData.type === 'installment' ? 'Valor Total da Compra (R$)' : 'Valor do Montante (R$)'}
-                                    </label>
-                                    <div className="relative">
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg text-slate-500 font-black">R$</span>
+                                    <div className="flex justify-between items-center ml-1">
+                                        <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                                            {formData.type === 'installment' 
+                                                ? (formData.inputMode === 'installment' ? 'Valor da Parcela (R$)' : 'Valor Total da Compra (R$)') 
+                                                : 'Valor do Montante (R$)'}
+                                        </label>
+                                        {formData.type === 'installment' && (
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setFormData({...formData, inputMode: formData.inputMode === 'total' ? 'installment' : 'total', totalValue: '', value: ''})} 
+                                                className="text-[9px] font-bold text-purple-400 uppercase tracking-widest hover:text-purple-300"
+                                            >
+                                                Alternar
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="relative mt-1">
+                                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-base text-slate-500 font-black">R$</span>
                                         <input
                                             required type="number" step="0.01"
-                                            className="hbo-input w-full pl-12 p-4 font-black text-xl"
-                                            placeholder="0,00"
-                                            value={formData.type === 'installment' ? formData.totalValue : formData.value}
+                                            className="hbo-input w-full pl-10 p-3 font-black text-lg"
+                                            placeholder="0.00"
+                                            value={formData.type === 'installment' 
+                                                ? (formData.inputMode === 'installment' ? formData.value : formData.totalValue) 
+                                                : formData.value}
                                             onChange={e => {
                                                 if(formData.type === 'installment') {
-                                                    setFormData({ ...formData, totalValue: e.target.value });
+                                                    if (formData.inputMode === 'installment') {
+                                                        setFormData({ ...formData, value: e.target.value });
+                                                    } else {
+                                                        setFormData({ ...formData, totalValue: e.target.value });
+                                                    }
                                                 } else {
                                                     setFormData({ ...formData, value: e.target.value });
                                                 }
                                             }}
                                         />
                                     </div>
-                                    {formData.type === 'installment' && formData.totalValue && formData.total && (
+                                    {formData.type === 'installment' && (
                                         <p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest ml-1 animate-pulse">
-                                            {formData.total}x de {formatMoney(parseFloat(formData.totalValue) / parseInt(formData.total))}
+                                            {formData.inputMode === 'installment' 
+                                                ? (formData.value && formData.total ? `Total: ${formatMoney(parseFloat(formData.value) * parseInt(formData.total))}` : '')
+                                                : (formData.totalValue && formData.total ? `${formData.total}x de ${formatMoney(parseFloat(formData.totalValue) / parseInt(formData.total))}` : '')}
                                         </p>
                                     )}
                                 </div>
@@ -1211,15 +1250,15 @@ function App() {
                                         <button
                                             type="button"
                                             onClick={() => setIsCategoryDropdownOpen(!isCategoryDropdownOpen)}
-                                            className={`w-full group flex items-center justify-between px-5 py-4 rounded-2xl border transition-all duration-300 ${isDarkMode ? 'bg-white/[0.03] border-white/10 hover:border-white/20' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}
+                                            className={`w-full group flex items-center justify-between px-4 py-3 rounded-2xl border transition-all duration-300 mt-1 ${isDarkMode ? 'bg-white/[0.03] border-white/10 hover:border-white/20' : 'bg-slate-50 border-slate-200 hover:border-slate-300'}`}
                                         >
                                             <div className="flex items-center gap-3">
                                                 {formData.category ? (
                                                     <>
-                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${CATEGORY_MAP[formData.category].bg} ${CATEGORY_MAP[formData.category].color}`}>
+                                                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${CATEGORY_MAP[formData.category].bg} ${CATEGORY_MAP[formData.category].color}`}>
                                                             {(() => {
                                                                 const Icon = CATEGORY_MAP[formData.category].icon;
-                                                                return <Icon size={18} strokeWidth={2.5} />;
+                                                                return <Icon size={16} strokeWidth={2.5} />;
                                                             })()}
                                                         </div>
                                                         <span className={`font-bold text-sm ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
@@ -1228,14 +1267,14 @@ function App() {
                                                     </>
                                                 ) : (
                                                     <>
-                                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center bg-white/5 text-slate-500`}>
-                                                            <LayoutDashboard size={18} />
+                                                        <div className={`w-7 h-7 rounded-xl flex items-center justify-center bg-white/5 text-slate-500`}>
+                                                            <LayoutDashboard size={16} />
                                                         </div>
                                                         <span className="text-slate-500 font-bold text-sm italic">Selecionar categoria...</span>
                                                     </>
                                                 )}
                                             </div>
-                                            <ChevronDown size={18} className={`text-slate-500 transition-transform duration-500 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} />
+                                            <ChevronDown size={16} className={`text-slate-500 transition-transform duration-500 ${isCategoryDropdownOpen ? 'rotate-180' : ''}`} />
                                         </button>
 
                                         {isCategoryDropdownOpen && (
@@ -1281,9 +1320,9 @@ function App() {
                             </div>
 
 
-                            <div className="space-y-2 pt-2">
+                            <div className="space-y-1.5 pt-1">
                                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Natureza da Transação</label>
-                                <div className="flex gap-2 p-1.5 rounded-2xl bg-white/[0.02] border border-white/5">
+                                <div className="flex gap-2 p-1.5 rounded-2xl bg-white/[0.02] border border-white/5 mt-1">
                                     {['fixed', 'installment', 'one-time'].map(type => (
                                         <button
                                             key={type} type="button"
@@ -1299,7 +1338,7 @@ function App() {
 
                                                 setFormData({ ...formData, type, value: newValue, totalValue: newTotalValue });
                                             }}
-                                            className={`flex-1 py-3 text-xs font-bold uppercase tracking-wider rounded-xl transition-all ${formData.type === type ? 'bg-white/10 text-white shadow-sm border border-white/10' : 'text-slate-500 hover:text-slate-300'}`}
+                                            className={`flex-1 py-2.5 text-[11px] font-bold uppercase tracking-wider rounded-xl transition-all ${formData.type === type ? 'bg-white/10 text-white shadow-sm border border-white/10' : 'text-slate-500 hover:text-slate-300'}`}
                                         >
                                             {TYPE_MAP[type].label}
                                         </button>
@@ -1308,24 +1347,26 @@ function App() {
                             </div>
 
                             {(formData.type === 'installment' || formData.type === 'fixed') && (
-                                <div className="space-y-6 p-5 rounded-2xl bg-white/[0.02] border border-white/5 animate-fade-in-up">
+                                <div className="space-y-4 p-4 rounded-2xl bg-white/[0.02] border border-white/5 animate-fade-in-up mt-1">
                                     {formData.type === 'installment' && (
-                                        <div className="grid grid-cols-2 gap-5">
-                                            <div className="space-y-2">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
                                                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Total de Parcelas</label>
                                                 <input
+                                                    required
                                                     type="number"
-                                                    className="hbo-input w-full p-3.5 text-center text-lg font-black"
+                                                    className="hbo-input w-full p-2.5 text-center text-base font-bold"
+                                                    placeholder="Ex: 12"
                                                     value={formData.total}
                                                     onChange={e => setFormData({ ...formData, total: e.target.value })}
                                                 />
                                             </div>
-                                            <div className="space-y-2">
+                                            <div className="space-y-1.5">
                                                 <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Parcelas Pagas</label>
                                                 <input
                                                     type="number"
-                                                    className="hbo-input w-full p-3.5 text-center text-lg font-black"
-                                                    placeholder="0"
+                                                    className="hbo-input w-full p-2.5 text-center text-base font-bold"
+                                                    placeholder="Ex: 2"
                                                     min="0"
                                                     value={formData.paidCount}
                                                     onChange={e => setFormData({ ...formData, paidCount: e.target.value })}
@@ -1336,14 +1377,15 @@ function App() {
                                             </div>
                                         </div>
                                     )}
-                                    <div className="space-y-2">
+                                    <div className="space-y-1.5">
                                         <label className="text-[10px] font-bold uppercase tracking-widest text-slate-400 ml-1 text-center block">Dia do Vencimento (1-31)</label>
                                         <input
+                                            required
                                             type="number"
                                             min="1"
                                             max="31"
-                                            className="hbo-input w-full p-3.5 text-center text-lg font-black"
-                                            placeholder="15"
+                                            className="hbo-input w-full p-2.5 text-center text-base font-bold"
+                                            placeholder="Ex: 15"
                                             value={formData.dueDay}
                                             onChange={e => setFormData({ ...formData, dueDay: e.target.value })}
                                         />
@@ -1401,7 +1443,7 @@ function App() {
                 isOpen={isReportModalOpen}
                 onClose={() => setIsReportModalOpen(false)}
                 category={selectedCategory}
-                expenses={expenses}
+                expenses={currentMonthExpenses}
                 selectedDate={selectedDate}
                 isDarkMode={isDarkMode}
             />

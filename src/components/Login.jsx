@@ -1,11 +1,18 @@
-import React from 'react';
-import { signInWithPopup, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
+import React, { useEffect } from 'react';
+import { signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signInWithCredential } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
 import { Capacitor } from '@capacitor/core';
 import { FirebaseAuthentication } from '@capacitor-firebase/authentication';
 import { Zap, ShieldCheck, PieChart, TrendingUp, Sparkles } from 'lucide-react';
 
 export default function Login() {
+    useEffect(() => {
+        getRedirectResult(auth).catch((error) => {
+            console.error("Login redirect error:", error);
+            alert("Erro ao entrar com Google (Redirect): " + error.message);
+        });
+    }, []);
+
     const handleGoogleLogin = async () => {
         try {
             if (Capacitor.isNativePlatform()) {
@@ -22,7 +29,12 @@ export default function Login() {
                     await signInWithCredential(auth, credential);
                 }
             } else {
-                await signInWithPopup(auth, googleProvider);
+                const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+                if (isMobile) {
+                    await signInWithRedirect(auth, googleProvider);
+                } else {
+                    await signInWithPopup(auth, googleProvider);
+                }
             }
         } catch (error) {
             console.error("Erro no login:", error);
