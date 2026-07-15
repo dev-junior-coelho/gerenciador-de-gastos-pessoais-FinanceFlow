@@ -38,6 +38,7 @@ export default function Login() {
             }
         } catch (error) {
             console.error("Erro no login:", error);
+            alert("Erro no login: " + (error.message || JSON.stringify(error)));
         }
     };
 
