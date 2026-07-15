@@ -570,7 +570,9 @@ function App() {
         const closingDay = dueDayInt - 10;
         let effectiveDate = new Date();
         
-        if (!isNaN(closingDay) && todayDay > closingDay) {
+        // Só avança para o próximo mês se closingDay > 0 (vencimento > dia 10)
+        // e hoje já passou do dia de fechamento da fatura
+        if (!isNaN(closingDay) && closingDay > 0 && todayDay > closingDay) {
             effectiveDate.setMonth(effectiveDate.getMonth() + 1);
         }
 
@@ -1017,7 +1019,7 @@ function App() {
                                                                     <div className="space-y-1.5 mt-3 pt-3 border-t border-white/5">
                                                                         <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest px-0.5">
                                                                             <span className="text-slate-500">
-                                                                                Restam <span className="text-white">{formatMoney((item.total - item.current + 1) * item.value)}</span>
+                                                                                Restam <span className="text-white">{formatMoney((item.total - item.current) * item.value)}</span>
                                                                             </span>
                                                                             <span className={Config.color}>
                                                                                 {((item.current / item.total) * 100).toFixed(0)}%
@@ -1372,7 +1374,22 @@ function App() {
                                                     onChange={e => setFormData({ ...formData, paidCount: e.target.value })}
                                                 />
                                                 <p className="text-[9px] text-slate-500 text-center">
-                                                    {parseInt(formData.paidCount) > 0 ? `Este mês será ${parseInt(formData.paidCount) + 1}/${formData.total || '?'}` : `Começa este mês (1/${formData.total || '?'})`}
+                                                    {(() => {
+                                                        const paid = parseInt(formData.paidCount) || 0;
+                                                        const total = formData.total || '?';
+                                                        const dueDayInt = parseInt(formData.dueDay);
+                                                        const todayDay = new Date().getDate();
+                                                        const closingDay = dueDayInt - 10;
+                                                        // Fatura fechada: só se closingDay > 0 e hoje passou do fechamento
+                                                        const isClosed = closingDay > 0 && todayDay > closingDay;
+                                                        const thisInstallment = paid + 1;
+                                                        if (isClosed) {
+                                                            return `Começa no próximo mês (parcela ${thisInstallment}/${total})`;
+                                                        }
+                                                        return paid > 0
+                                                            ? `Este mês será a parcela ${thisInstallment}/${total}`
+                                                            : `Começa este mês (1/${total})`;
+                                                    })()}
                                                 </p>
                                             </div>
                                         </div>
@@ -1403,9 +1420,11 @@ function App() {
                                     // Dia de fechamento: 10 dias antes do vencimento
                                     const closingDay = dueDayInt - 10;
 
-                                    // Fatura fechou se hoje passou do dia de fechamento
-                                    // Se closingDay <= 0, o fechamento foi no mês anterior (sempre fechado no mês atual)
-                                    const isClosed = closingDay <= 0 ? true : todayDay > closingDay;
+                                    // Fatura fechou se hoje passou do dia de fechamento.
+                                    // Se closingDay <= 0, significa que o vencimento é muito cedo no mês
+                                    // (ex: dia 5 → fechamento dia -5). Nesse caso, a fatura NUNCA
+                                    // está "fechada" no mês atual — o débito entra diretamente.
+                                    const isClosed = closingDay > 0 && todayDay > closingDay;
                                     
                                     if (isClosed) {
                                         const nextMonth = new Date();
@@ -1480,10 +1499,15 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDark
     const firstPayment = `${day}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
     
     // Para parcelados, calcular a última parcela
+    // expense.date sempre aponta para o início real (1ª parcela), e expense.current no banco é sempre 1.
+    // Portanto, a última parcela ocorre em: dataInício + (total - 1) meses.
     let lastPayment = '-';
     if (expense.type === 'installment') {
         const lastDate = new Date(dateObj);
-        lastDate.setMonth(lastDate.getMonth() + (expense.total - expense.current));
+        // current no banco é sempre 1; usamos (total - 1) para chegar à última
+        lastDate.setDate(1); // evita salto de mês em dias como 31
+        lastDate.setMonth(lastDate.getMonth() + (expense.total - 1));
+        lastDate.setDate(parseInt(day) || 1);
         lastPayment = `${day}/${(lastDate.getMonth() + 1).toString().padStart(2, '0')}/${lastDate.getFullYear()}`;
     }
 
@@ -1550,7 +1574,9 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDark
                                 />
                             </div>
                             <p className="text-[10px] text-slate-500 text-center mt-3 font-medium italic">
-                                Falta quitar {formatMoney((expense.total - expense.current + 1) * expense.value)}
+                                {expense.total - expense.current > 0
+                                    ? `Falta quitar ${formatMoney((expense.total - expense.current) * expense.value)} (${expense.total - expense.current} parcela${expense.total - expense.current > 1 ? 's' : ''})`
+                                    : 'Última parcela! 🎉'}
                             </p>
                         </div>
                     )}
