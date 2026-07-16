@@ -439,6 +439,12 @@ function App() {
     const stats = useMemo(() => {
         const totalMonthly = currentMonthExpenses.reduce((acc, item) => acc + item.value, 0);
 
+        const paidExpenses = currentMonthExpenses.filter(item => item.paidMonths && item.paidMonths[currentMonthKey]);
+        const totalPaid = paidExpenses.reduce((acc, item) => acc + item.value, 0);
+        const totalRemaining = totalMonthly - totalPaid;
+        const paidCount = paidExpenses.length;
+        const totalCount = currentMonthExpenses.length;
+
         const fixedTotal = currentMonthExpenses.filter(e => e.type === 'fixed').reduce((acc, e) => acc + e.value, 0);
         const oneTimeTotal = currentMonthExpenses.filter(e => e.type === 'one-time').reduce((acc, e) => acc + e.value, 0);
         const installmentTotal = currentMonthExpenses.filter(e => e.type === 'installment').reduce((acc, e) => acc + e.value, 0);
@@ -459,8 +465,21 @@ function App() {
         const balance = incomeVal - totalMonthly;
         const expenseRatio = incomeVal > 0 ? (totalMonthly / incomeVal) * 100 : 0;
 
-        return { totalMonthly, balance, income: incomeVal, expenseRatio, chartData, fixedTotal, oneTimeTotal, installmentTotal };
-    }, [currentMonthExpenses, currentIncome]);
+        return { 
+            totalMonthly, 
+            balance, 
+            income: incomeVal, 
+            expenseRatio, 
+            chartData, 
+            fixedTotal, 
+            oneTimeTotal, 
+            installmentTotal,
+            totalPaid,
+            totalRemaining,
+            paidCount,
+            totalCount
+        };
+    }, [currentMonthExpenses, currentIncome, currentMonthKey]);
 
     const notifications = useMemo(() => {
         const today = new Date();
@@ -630,6 +649,21 @@ function App() {
             setFormData({ name: '', value: '', totalValue: '', type: 'fixed', current: 1, total: '', paidCount: '', category: '', dueDay: '', inputMode: 'total' });
         } catch (error) {
             console.error("Error saving expense:", error);
+        }
+    };
+
+    const togglePaidStatus = async (item) => {
+        if (!user) return;
+        const isPaid = item.paidMonths && item.paidMonths[currentMonthKey];
+        const expenseRef = doc(db, `users/${user.uid}/expenses`, item.id);
+        
+        try {
+            await updateDoc(expenseRef, {
+                [`paidMonths.${currentMonthKey}`]: !isPaid
+            });
+        } catch (error) {
+            console.error("Error toggling paid status:", error);
+            alert("Erro ao atualizar status de pagamento: " + error.message);
         }
     };
 
@@ -899,14 +933,17 @@ function App() {
 
                             {/* Card 2: Renda Comprometida */}
                             <div className="aspect-square max-w-[180px] mx-auto w-full rounded-full hbo-card p-2 flex flex-col items-center justify-center text-center relative overflow-hidden group border-2 border-rose-500/20 shadow-[0_0_20px_rgba(244,63,94,0.1)] hover:shadow-[0_0_30px_rgba(244,63,94,0.2)] transition-all duration-500">
-                                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-rose-500/10 flex items-center justify-center mb-2 border border-rose-500/10">
+                                <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-rose-500/10 flex items-center justify-center mb-1 border border-rose-500/10">
                                     <ArrowUpCircle className="text-rose-400" size={16} />
                                 </div>
-                                <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Renda Comprometida</span>
-                                <h3 className="text-base lg:text-2xl font-black tracking-tighter text-white">
+                                <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-widest text-slate-500 mb-0.5">Renda Comprometida</span>
+                                <h3 className="text-sm lg:text-xl font-black tracking-tighter text-white leading-tight">
                                     {formatMoney(stats.totalMonthly).replace('R$', '')}
                                 </h3>
-                                <div className="w-6 h-1 rounded-full bg-rose-500 mt-2 shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
+                                <div className="text-[8px] lg:text-[9px] font-bold text-rose-400 mt-0.5">
+                                    Falta: {formatMoney(stats.totalRemaining).replace('R$', '')}
+                                </div>
+                                <div className="w-6 h-1 rounded-full bg-rose-500 mt-1 shadow-[0_0_10px_rgba(244,63,94,0.8)]"></div>
                             </div>
 
                             {/* Card 3: Renda Livre */}
@@ -936,7 +973,7 @@ function App() {
                         </div>
 
                         {/* Seletor de Mês (Posicionamento Premium) */}
-                        <div className="flex items-center justify-center mt-2">
+                        <div className="flex flex-col items-center gap-4 mt-2">
                              <div className="flex items-center gap-4 lg:gap-8 p-1.5 rounded-2xl bg-black/40 border border-white/5 backdrop-blur-xl shadow-2xl">
                                 <button onClick={() => changeMonth(-1)} className="p-2 lg:p-3 rounded-xl text-purple-400 hover:bg-white/10 transition-all"><ChevronLeft size={20} /></button>
                                 <div className="text-center px-4 border-x border-white/5">
@@ -947,6 +984,33 @@ function App() {
                                 </div>
                                 <button onClick={() => changeMonth(1)} className="p-2 lg:p-3 rounded-xl text-purple-400 hover:bg-white/10 transition-all"><ChevronRight size={20} /></button>
                             </div>
+
+                            {/* Payment Progress Bar */}
+                            {stats.totalCount > 0 && (
+                                <div className="w-full max-w-xl px-4 py-3 rounded-2xl bg-black/30 border border-white/5 backdrop-blur-xl shadow-xl flex flex-col gap-2">
+                                    <div className="flex items-center justify-between text-xs font-bold">
+                                        <span className="text-slate-400 flex items-center gap-1.5">
+                                            <Check size={14} className="text-emerald-400" />
+                                            Pagamento das Despesas
+                                        </span>
+                                        <span className="text-white">
+                                            {stats.paidCount} de {stats.totalCount} ({stats.totalCount > 0 ? Math.round((stats.paidCount / stats.totalCount) * 100) : 0}%)
+                                        </span>
+                                    </div>
+                                    <div className="h-1.5 w-full bg-white/5 rounded-full relative overflow-hidden ring-1 ring-white/5 shadow-inner">
+                                        <div
+                                            className="absolute inset-y-0 left-0 transition-all duration-700 ease-out rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                                            style={{
+                                                width: `${stats.totalCount > 0 ? (stats.paidCount / stats.totalCount) * 100 : 0}%`
+                                            }}
+                                        ></div>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest mt-1">
+                                        <span className="text-emerald-400">Pago: {formatMoney(stats.totalPaid)}</span>
+                                        <span className="text-rose-400">Falta Pagar: {formatMoney(stats.totalRemaining)}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* LIST & CHART SECTION */}
@@ -974,21 +1038,40 @@ function App() {
                                         <h3 className="text-lg font-bold mb-2 text-white">Base limpa</h3>
                                         <p className="text-sm font-medium text-slate-500">Não há registros detectados neste recorte temporal.</p>
                                     </div>
-                                ) : (
+) : (
                                     <div className="space-y-3">
                                         {filteredDisplayList.map((item) => {
                                             const Config = CATEGORY_MAP[item.category] || CATEGORY_MAP.others;
                                             const progress = item.total ? (item.current / item.total) * 100 : 0;
-                                            const remaining = item.total ? (item.total - item.current) * item.value : 0;
+                                            const isPaid = item.paidMonths && item.paidMonths[currentMonthKey];
 
                                             return (
                                                 <div 
                                                     key={item.id} 
                                                     onClick={() => { setSelectedExpenseDetail(item); setIsDetailModalOpen(true); }}
-                                                    className="hbo-card overflow-hidden group transition-all duration-300 hover:bg-white/[0.04] hover:border-white/10 hover:shadow-2xl cursor-pointer"
+                                                    className={`hbo-card overflow-hidden group transition-all duration-300 hover:bg-white/[0.04] hover:border-white/10 hover:shadow-2xl cursor-pointer ${
+                                                        isPaid ? 'opacity-65 border-emerald-500/25 shadow-[0_0_15px_rgba(16,185,129,0.05)]' : ''
+                                                    }`}
                                                 >
                                                     <div className="p-4 lg:p-5">
                                                         <div className="flex items-start gap-4">
+                                                            {/* Checkbox de Pagamento */}
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    togglePaidStatus(item);
+                                                                }}
+                                                                className={`w-6 h-6 rounded-lg flex items-center justify-center border-2 transition-all duration-300 shrink-0 self-center ${
+                                                                    isPaid
+                                                                        ? 'bg-emerald-500 border-emerald-500 text-black scale-105 shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                                                                        : 'border-slate-600 hover:border-emerald-400 hover:bg-emerald-500/10'
+                                                                }`}
+                                                            >
+                                                                {isPaid && (
+                                                                    <Check size={14} strokeWidth={3} className="text-black" />
+                                                                )}
+                                                            </button>
+
                                                             {/* Icone */}
                                                             <div className={`w-12 h-12 rounded-xl shrink-0 flex items-center justify-center border shadow-lg ${Config.bg} ${Config.border} ${Config.color} transition-transform group-hover:scale-105 duration-300`}>
                                                                 <Config.icon size={22} strokeWidth={2.5} />
@@ -997,7 +1080,9 @@ function App() {
                                                             <div className="flex-1 min-w-0 pt-0.5">
                                                                 <div className="flex items-start justify-between gap-2">
                                                                     <div className="min-w-0">
-                                                                        <h4 className="text-sm font-bold text-white truncate flex items-center gap-2 mb-1">
+                                                                        <h4 className={`text-sm font-bold truncate flex items-center gap-2 mb-1 ${
+                                                                            isPaid ? 'text-slate-400 line-through' : 'text-white'
+                                                                        }`}>
                                                                             {item.name}
                                                                         </h4>
                                                                         <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-slate-400">
@@ -1006,7 +1091,9 @@ function App() {
                                                                     </div>
                                                                     
                                                                     <div className="flex flex-col items-end gap-2 shrink-0">
-                                                                        <span className="text-base font-black text-white leading-none mt-0.5">{formatMoney(item.value)}</span>
+                                                                        <span className={`text-base font-black leading-none mt-0.5 ${
+                                                                            isPaid ? 'text-slate-400 line-through' : 'text-white'
+                                                                        }`}>{formatMoney(item.value)}</span>
                                                                         
                                                                         <div className="flex items-center justify-center w-8 h-8 rounded-full bg-white/5 border border-white/5 text-slate-400 group-hover:text-purple-400 group-hover:bg-purple-500/10 group-hover:border-purple-500/20 transition-all">
                                                                             <ChevronRight size={18} />
@@ -1470,7 +1557,7 @@ function App() {
             <ExpenseDetailModal
                 isOpen={isDetailModalOpen}
                 onClose={() => setIsDetailModalOpen(false)}
-                expense={selectedExpenseDetail}
+                expense={expenses.find(e => e.id === selectedExpenseDetail?.id) || selectedExpenseDetail}
                 onEdit={(item) => {
                     setIsDetailModalOpen(false);
                     handleEdit(item);
@@ -1481,17 +1568,20 @@ function App() {
                 }}
                 isDarkMode={isDarkMode}
                 currentIncome={currentIncome}
+                onTogglePaid={togglePaidStatus}
+                currentMonthKey={currentMonthKey}
             />
         </div>
     );
 }
 
 // NOVO COMPONENTE: MODAL DE DETALHES
-const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDarkMode, currentIncome }) => {
+const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDarkMode, currentIncome, onTogglePaid, currentMonthKey }) => {
     if (!isOpen || !expense) return null;
 
     const config = CATEGORY_MAP[expense.category] || CATEGORY_MAP.others;
     const commitment = ((expense.value / currentIncome) * 100).toFixed(2);
+    const isPaid = expense.paidMonths && expense.paidMonths[currentMonthKey];
     
     // Cálculos de datas
     const dateObj = new Date(expense.date);
@@ -1535,7 +1625,7 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDark
 
                 {/* Main Value */}
                 <div className="px-8 py-6 text-center">
-                    <div className={`text-4xl font-black tracking-tighter mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                    <div className={`text-4xl font-black tracking-tighter mb-2 ${isDarkMode ? 'text-white' : 'text-slate-900'} ${isPaid ? 'line-through opacity-70' : ''}`}>
                         {formatMoney(expense.value)}
                     </div>
                     <div className="flex items-center justify-center gap-2">
@@ -1545,6 +1635,34 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDark
                         <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Fluxo Mensal</span>
                     </div>
                 </div>
+
+                {/* Status de Pagamento no Mês Selecionado */}
+                {onTogglePaid && currentMonthKey && (
+                    <div className="px-8 pb-4">
+                        <button
+                            onClick={() => onTogglePaid(expense)}
+                            className={`w-full py-4 px-6 rounded-3xl border flex items-center justify-between transition-all duration-300 ${
+                                isPaid 
+                                    ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 shadow-[inset_0_0_12px_rgba(16,185,129,0.05)]' 
+                                    : 'bg-white/[0.02] border-white/5 text-slate-400 hover:border-white/10 hover:bg-white/[0.04]'
+                            }`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-5 h-5 rounded-md flex items-center justify-center border-2 transition-all ${
+                                    isPaid ? 'bg-emerald-500 border-emerald-500 text-black' : 'border-slate-600'
+                                }`}>
+                                    {isPaid && <Check size={12} strokeWidth={3} className="text-black" />}
+                                </div>
+                                <span className="text-[11px] font-black uppercase tracking-widest">
+                                    {isPaid ? 'Marcar como Pendente' : 'Marcar como Pago'}
+                                </span>
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-widest ${isPaid ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                {isPaid ? 'Pago' : 'Pendente'}
+                            </span>
+                        </button>
+                    </div>
+                )}
 
                 {/* Details Grid */}
                 <div className="px-8 pb-8 space-y-4">
