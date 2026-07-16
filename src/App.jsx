@@ -903,6 +903,43 @@ function App() {
 
                     <main className="p-4 lg:p-8 pb-32 space-y-6 lg:space-y-8">
 
+                        {/* Progress Indicator (Discreet & Sleek) */}
+                        {stats.totalCount > 0 && (
+                            <div className="max-w-7xl mx-auto w-full px-2 lg:px-0">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3.5 rounded-2xl bg-white/[0.02] border border-white/5 backdrop-blur-md shadow-lg">
+                                    <div className="flex items-center gap-3 flex-1">
+                                        <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                            <Check size={14} className="text-emerald-400" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1.5">
+                                                <span>Progresso de Pagamentos</span>
+                                                <span className="text-white font-black">{stats.paidCount}/{stats.totalCount} ({stats.totalCount > 0 ? Math.round((stats.paidCount / stats.totalCount) * 100) : 0}%)</span>
+                                            </div>
+                                            <div className="h-1 w-full bg-white/5 rounded-full relative overflow-hidden">
+                                                <div
+                                                    className="absolute inset-y-0 left-0 transition-all duration-700 ease-out rounded-full bg-gradient-to-r from-emerald-500 to-teal-400"
+                                                    style={{
+                                                        width: `${stats.totalCount > 0 ? (stats.paidCount / stats.totalCount) * 100 : 0}%`
+                                                    }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-4 sm:border-l border-white/5 sm:pl-6 text-[10px] font-bold uppercase tracking-widest shrink-0">
+                                        <div className="flex flex-col">
+                                            <span className="text-slate-500 text-[8px] mb-0.5">Pago</span>
+                                            <span className="text-emerald-400 font-extrabold">{formatMoney(stats.totalPaid)}</span>
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="text-slate-500 text-[8px] mb-0.5">A Pagar</span>
+                                            <span className="text-rose-400 font-extrabold">{formatMoney(stats.totalRemaining)}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* HERO / METRICS GRID */}
                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 px-2 lg:px-0 max-w-7xl mx-auto w-full">
                             {/* Card 1: Renda do Mês (Novo Posicionamento) */}
@@ -984,33 +1021,6 @@ function App() {
                                 </div>
                                 <button onClick={() => changeMonth(1)} className="p-2 lg:p-3 rounded-xl text-purple-400 hover:bg-white/10 transition-all"><ChevronRight size={20} /></button>
                             </div>
-
-                            {/* Payment Progress Bar */}
-                            {stats.totalCount > 0 && (
-                                <div className="w-full max-w-xl px-4 py-3 rounded-2xl bg-black/30 border border-white/5 backdrop-blur-xl shadow-xl flex flex-col gap-2">
-                                    <div className="flex items-center justify-between text-xs font-bold">
-                                        <span className="text-slate-400 flex items-center gap-1.5">
-                                            <Check size={14} className="text-emerald-400" />
-                                            Pagamento das Despesas
-                                        </span>
-                                        <span className="text-white">
-                                            {stats.paidCount} de {stats.totalCount} ({stats.totalCount > 0 ? Math.round((stats.paidCount / stats.totalCount) * 100) : 0}%)
-                                        </span>
-                                    </div>
-                                    <div className="h-1.5 w-full bg-white/5 rounded-full relative overflow-hidden ring-1 ring-white/5 shadow-inner">
-                                        <div
-                                            className="absolute inset-y-0 left-0 transition-all duration-700 ease-out rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
-                                            style={{
-                                                width: `${stats.totalCount > 0 ? (stats.paidCount / stats.totalCount) * 100 : 0}%`
-                                            }}
-                                        ></div>
-                                    </div>
-                                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest mt-1">
-                                        <span className="text-emerald-400">Pago: {formatMoney(stats.totalPaid)}</span>
-                                        <span className="text-rose-400">Falta Pagar: {formatMoney(stats.totalRemaining)}</span>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
                         {/* LIST & CHART SECTION */}
