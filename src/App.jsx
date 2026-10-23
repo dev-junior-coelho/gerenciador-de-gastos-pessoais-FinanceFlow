@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { getMonthKey, monthOrdinal, monthKeyFromOrdinal, monthStartIso, parseMoney, roundMoney, billingMonthForPurchase, paidMonthsBefore, projectExpensesForMonth, upcomingDueNotifications, dueDateForMonth } from './utils/finance';
 import {
     Plus, Trash2, CreditCard, Home, ShoppingCart, Car, Tv,
     Zap, TrendingUp, Calendar, MoreVertical, X, Wallet,
     ChevronLeft, ChevronRight, ChevronDown, Wifi, ArrowUpCircle, DollarSign,
-    Save, PieChart, Target, LayoutDashboard, Menu, Bell,
+    PieChart, Target, LayoutDashboard, Menu, Bell,
     Search, LogOut, Filter, Pencil, Smartphone, Sparkles, Check, Info
 } from 'lucide-react';
 import {
@@ -12,7 +13,7 @@ import {
 import Login from './components/Login';
 import { db, auth } from './firebase';
 import {
-    collection, addDoc, updateDoc, deleteDoc, doc, query, onSnapshot, orderBy, getDoc, setDoc
+    collection, addDoc, updateDoc, deleteDoc, doc, query, onSnapshot, orderBy, setDoc
 } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 
@@ -235,7 +236,15 @@ function App() {
     const [expenses, setExpenses] = useState([]);
 
     useEffect(() => {
+        let unsubscribeExpenses = () => {};
+        let unsubscribeIncome = () => {};
         const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+            unsubscribeExpenses();
+            unsubscribeIncome();
+            unsubscribeExpenses = () => {};
+            unsubscribeIncome = () => {};
+            setExpenses([]);
+            setIncome({ default: 0, exceptions: {} });
             setUser(currentUser);
             setAuthLoading(false);
 
@@ -244,7 +253,7 @@ function App() {
                 const expensesCollectionRef = collection(db, `users/${currentUser.uid}/expenses`);
                 const q = query(expensesCollectionRef, orderBy('createdAt', 'desc'));
 
-                const unsubscribeSnapshot = onSnapshot(q, (snapshot) => {
+                unsubscribeExpenses = onSnapshot(q, (snapshot) => {
                     const fetchedExpenses = snapshot.docs.map(doc => ({
                         id: doc.id,
                         ...doc.data()
@@ -257,38 +266,39 @@ function App() {
                 });
 
                 const incomeRef = doc(db, `users/${currentUser.uid}/config/income`);
-                const unsubscribeIncome = onSnapshot(incomeRef, (docSnap) => {
+                unsubscribeIncome = onSnapshot(incomeRef, (docSnap) => {
                     if (docSnap.exists()) {
-                        setIncome(docSnap.data());
+                        setIncome({ default: 0, exceptions: {}, ...docSnap.data(), exceptions: docSnap.data().exceptions || {} });
                     } else {
-                        setIncome({ default: 6000, exceptions: {} });
+                        setIncome({ default: 0, exceptions: {} });
                     }
                 });
 
-                return () => {
-                    unsubscribeSnapshot();
-                    unsubscribeIncome();
-                };
             } else {
                 setExpenses([]);
-                setIncome({ default: 6000, exceptions: {} });
+                setIncome({ default: 0, exceptions: {} });
                 setLoadingExpenses(false);
             }
         });
-        return () => unsubscribeAuth();
+        return () => {
+            unsubscribeAuth();
+            unsubscribeExpenses();
+            unsubscribeIncome();
+        };
     }, []);
 
-    const [income, setIncome] = useState({ default: 6000, exceptions: {} });
+    const [income, setIncome] = useState({ default: 0, exceptions: {} });
     const [isEditingIncome, setIsEditingIncome] = useState(false);
     const [tempIncome, setTempIncome] = useState('');
     const [readNotifications, setReadNotifications] = useState(() => {
-        const saved = localStorage.getItem('readNotifications');
-        return saved ? JSON.parse(saved) : [];
+        try { const saved = localStorage.getItem('readNotifications'); return saved ? JSON.parse(saved) : []; }
+        catch { return []; }
     });
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [filterType, setFilterType] = useState('all');
+    const [searchTerm, setSearchTerm] = useState('');
     const [isPremium, setIsPremium] = useState(false);
     const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
@@ -363,13 +373,13 @@ function App() {
         };
     }, [isSidebarOpen]);
 
-    const getMonthKey = (date) => `${date.getFullYear()}-${date.getMonth()}`;
     const currentMonthKey = getMonthKey(selectedDate);
-    const isUsingCustomIncome = income.exceptions.hasOwnProperty(currentMonthKey);
+    const isUsingCustomIncome = Object.prototype.hasOwnProperty.call(income.exceptions || {}, currentMonthKey);
     const currentIncome = isUsingCustomIncome ? income.exceptions[currentMonthKey] : income.default;
 
     const changeMonth = (offset) => {
         const newDate = new Date(selectedDate);
+        newDate.setDate(1);
         newDate.setMonth(newDate.getMonth() + offset);
         setSelectedDate(newDate);
     };
@@ -383,7 +393,8 @@ function App() {
 
     const saveIncome = async () => {
         if (!user) return;
-        const val = parseFloat(tempIncome) || 0;
+        const val = parseMoney(tempIncome);
+        if (val === null) { alert('Informe um valor de renda válido.'); return; }
         const newIncome = { 
             ...income,
             exceptions: {
@@ -403,7 +414,7 @@ function App() {
 
     const handleResetIncome = async () => {
         if (!user) return;
-        const newIncome = { ...income };
+        const newIncome = { ...income, exceptions: { ...income.exceptions } };
         delete newIncome.exceptions[currentMonthKey];
 
         setIncome(newIncome);
@@ -414,27 +425,7 @@ function App() {
         }
     };
 
-    const currentMonthExpenses = useMemo(() => {
-        return expenses.map(item => {
-            if (item.type === 'fixed') return item;
-            if (item.type === 'one-time') {
-                const itemDate = item.date ? new Date(item.date) : (item.createdAt ? new Date(item.createdAt) : new Date());
-                const itemMonthDiff = (selectedDate.getFullYear() - itemDate.getFullYear()) * 12 + (selectedDate.getMonth() - itemDate.getMonth());
-                return itemMonthDiff === 0 ? item : null;
-            }
-            if (item.type === 'installment') {
-                const itemDate = item.date ? new Date(item.date) : (item.createdAt ? new Date(item.createdAt) : new Date());
-                const diffFromStart = (selectedDate.getFullYear() - itemDate.getFullYear()) * 12 + (selectedDate.getMonth() - itemDate.getMonth());
-                const projectedCurrent = (item.current || 1) + diffFromStart;
-
-                if (projectedCurrent > 0 && projectedCurrent <= item.total) {
-                    return { ...item, current: projectedCurrent };
-                }
-                return null;
-            }
-            return item;
-        }).filter(Boolean);
-    }, [expenses, selectedDate]);
+    const currentMonthExpenses = useMemo(() => projectExpensesForMonth(expenses, selectedDate), [expenses, selectedDate]);
 
     const stats = useMemo(() => {
         const totalMonthly = currentMonthExpenses.reduce((acc, item) => acc + item.value, 0);
@@ -481,29 +472,7 @@ function App() {
         };
     }, [currentMonthExpenses, currentIncome, currentMonthKey]);
 
-    const notifications = useMemo(() => {
-        const today = new Date();
-        const currentYear = today.getFullYear();
-        const currentMonth = today.getMonth();
-        const currentDay = today.getDate();
-
-        return currentMonthExpenses.filter(e => {
-            if (!e.dueDay) return false;
-            const dueDay = parseInt(e.dueDay);
-            
-            // Verifica se o vencimento é neste mês e se faltam 3 dias ou menos
-            const dueDate = new Date(currentYear, currentMonth, dueDay);
-            const diffTime = dueDate.getTime() - today.getTime();
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-            return diffDays >= 0 && diffDays <= 3;
-        }).map(e => ({
-            id: `notif-${e.id}-${currentMonth}`,
-            title: `Vencimento Próximo`,
-            message: `A fatura de "${e.name}" vence em ${e.dueDay}/${currentMonth + 1}.`,
-            expense: e
-        }));
-    }, [currentMonthExpenses]);
+    const notifications = useMemo(() => upcomingDueNotifications(expenses, new Date()), [expenses]);
 
     const unreadNotifications = notifications.filter(n => !readNotifications.includes(n.id));
 
@@ -519,14 +488,15 @@ function App() {
         
         if (filterType !== 'all') {
             if (filterType === 'fixed') {
-                list = list.filter(e => e.type === 'fixed' || e.type === 'one-time');
+                list = list.filter(e => e.type === 'fixed');
             } else {
                 list = list.filter(e => e.type === filterType);
             }
         }
 
+        if (searchTerm.trim()) list = list.filter(e => e.name?.toLocaleLowerCase('pt-BR').includes(searchTerm.trim().toLocaleLowerCase('pt-BR')));
         return list;
-    }, [currentMonthExpenses, filterType]);
+    }, [currentMonthExpenses, filterType, searchTerm]);
 
     const handleDelete = async (id) => {
         if (!user) return;
@@ -551,13 +521,15 @@ function App() {
 
         setEditingId(original.id);
         setFormData({
+            originalDate: original.date,
+            paidMonths: original.paidMonths || {},
             name: original.name,
             value: original.value.toString(),
             totalValue: (original.totalValue || (original.value * (original.total || 1))).toString(),
             type: original.type,
             current: projectedCurrent,
             total: original.total || '',
-            paidCount: projectedCurrent - 1, // quantas já foram pagas
+            paidCount: Object.keys(original.paidMonths || {}).filter(key => original.paidMonths[key]).length,
             category: original.category || '',
             dueDay: original.dueDay || '',
             inputMode: 'total'
@@ -579,63 +551,54 @@ function App() {
             return;
         }
 
-        let calculatedValue = parseFloat(formData.value) || 0;
-        let startCurrentForSave = 1;  // current da parcela que ficará salva no banco
-        let expenseSaveDate;
-
+        const amount = parseMoney(formData.type === 'installment' && formData.inputMode !== 'installment' ? formData.totalValue : formData.value);
+        if (amount === null || amount <= 0) { alert('Informe um valor maior que zero.'); return; }
+        const dueDay = Number(formData.dueDay);
+        if (formData.dueDay && (!Number.isInteger(dueDay) || dueDay < 1 || dueDay > 31)) {
+            alert('Informe um dia de vencimento entre 1 e 31.'); return;
+        }
         const today = new Date();
-        const todayDay = today.getDate();
-        const dueDayInt = parseInt(formData.dueDay);
-        const closingDay = dueDayInt - 10;
-        let effectiveDate = new Date();
-        
-        // Só avança para o próximo mês se closingDay > 0 (vencimento > dia 10)
-        // e hoje já passou do dia de fechamento da fatura
-        if (!isNaN(closingDay) && closingDay > 0 && todayDay > closingDay) {
-            effectiveDate.setMonth(effectiveDate.getMonth() + 1);
+        const original = editingId ? expenses.find(item => item.id === editingId) : null;
+        const total = Number(formData.total);
+        const paidCount = formData.paidCount === '' ? 0 : Number(formData.paidCount);
+        if (formData.type === 'installment' &&
+            (!Number.isInteger(total) || total < 1 || total > 600 ||
+             !Number.isInteger(paidCount) || paidCount < 0 || paidCount > total)) {
+            alert('Informe parcelas entre 1 e 600 e quantidade já paga entre 0 e o total.'); return;
         }
-
-        if (formData.type === 'installment') {
-            const total = parseInt(formData.total) || 12;
-            
-            if (formData.inputMode === 'installment') {
-                calculatedValue = parseFloat(formData.value) || 0;
-            } else {
-                const totalVal = parseFloat(formData.totalValue) || 0;
-                calculatedValue = totalVal / total;
-            }
-
-            startCurrentForSave = 1;
-
-            const paid = Math.max(0, parseInt(formData.paidCount || 0));
-            const refDate = new Date(effectiveDate); // Apply closing date rule first
-            refDate.setDate(1); // avoid jumping months on days like 31
-            refDate.setMonth(refDate.getMonth() - paid);
-            refDate.setDate(parseInt(formData.dueDay) || 1);
-            expenseSaveDate = refDate.toISOString();
-        }
-
-        const finalDate = (formData.type === 'installment' && expenseSaveDate)
-            ? expenseSaveDate
-            : effectiveDate.toISOString();
-
+        const calculatedValue = formData.type === 'installment' && formData.inputMode !== 'installment'
+            ? roundMoney(amount / total) : amount;
+        const totalValue = formData.type === 'installment'
+            ? (formData.inputMode === 'installment' ? roundMoney(amount * total) : amount) : null;
+        const targetMonth = original
+            ? monthOrdinal(new Date(original.date)) + (formData.type === 'installment' ? paidCount : 0)
+            : billingMonthForPurchase(today, formData.type === 'one-time' ? null : dueDay);
+        const startMonth = formData.type === 'installment' ? targetMonth - paidCount : targetMonth;
         const expenseData = {
-            name: formData.name,
+            name: formData.name.trim(),
             value: calculatedValue,
             type: formData.type,
             category: formData.category,
-            ...(formData.type === 'installment' && {
-                current: startCurrentForSave,
-                total: parseInt(formData.total),
-                totalValue: formData.inputMode === 'installment' 
-                    ? calculatedValue * parseInt(formData.total) 
-                    : (parseFloat(formData.totalValue) || calculatedValue * parseInt(formData.total))
-            }),
-            dueDay: formData.dueDay,
-            date: finalDate,
-            createdAt: new Date().toISOString(),
-            isFutureBilling: todayDay > closingDay
+            dueDay: formData.type === 'one-time' ? '' : String(dueDay),
+            date: original && original.type === formData.type
+                ? original.date : monthStartIso(startMonth),
+            ...(!original && { createdAt: today.toISOString() }),
+            ...(formData.type === 'installment' ? {
+                current: 1,
+                total,
+                totalValue,
+                paidMonths: original && original.type === 'installment'
+                    ? (original.paidMonths || {})
+                    : paidMonthsBefore(startMonth, paidCount)
+            } : {
+                current: null, total: null, totalValue: null,
+                paidMonths: original ? (original.paidMonths || {}) : {}
+            })
         };
+        if (original && formData.type === 'installment' && original.type === 'installment') {
+            const originalMonth = monthOrdinal(new Date(original.date));
+            expenseData.date = monthStartIso(originalMonth);
+        }
 
         try {
             if (editingId) {
@@ -649,6 +612,7 @@ function App() {
             setFormData({ name: '', value: '', totalValue: '', type: 'fixed', current: 1, total: '', paidCount: '', category: '', dueDay: '', inputMode: 'total' });
         } catch (error) {
             console.error("Error saving expense:", error);
+            alert('Não foi possível salvar o lançamento. Tente novamente.');
         }
     };
 
@@ -840,7 +804,7 @@ function App() {
 
                             <div className={`hidden md:flex items-center gap-3 px-4 py-2.5 rounded-2xl border w-full max-w-md transition-all ${isDarkMode ? 'bg-black/20 border-white/5 focus-within:border-purple-500/50 focus-within:bg-white/5 text-white' : 'bg-slate-50 border-slate-200 focus-within:border-indigo-400 text-slate-900'}`}>
                                 <Search size={16} className="text-slate-400 shrink-0" />
-                                <input type="text" placeholder="Consultar lançamentos..." className="bg-transparent border-none outline-none text-sm w-full font-medium placeholder:text-slate-500" />
+                                <input type="text" placeholder="Consultar lançamentos..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="bg-transparent border-none outline-none text-sm w-full font-medium placeholder:text-slate-500" />
                             </div>
                         </div>
 
@@ -852,7 +816,7 @@ function App() {
                             <div className="relative">
                                 <button 
                                     onClick={() => { setIsNotificationOpen(!isNotificationOpen); markAllAsRead(); }}
-                                    className={`p-2.5 rounded-xl transition-all relative hidden sm:block border ${isDarkMode ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/5' : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200'}`}
+                                    className={`p-2.5 rounded-xl transition-all relative border ${isDarkMode ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/5' : 'bg-slate-50 hover:bg-slate-100 text-slate-500 border-slate-200'}`}
                                 >
                                     <Bell size={18} />
                                     {unreadNotifications.length > 0 && (
@@ -1052,8 +1016,7 @@ function App() {
                                     <div className="space-y-3">
                                         {filteredDisplayList.map((item) => {
                                             const Config = CATEGORY_MAP[item.category] || CATEGORY_MAP.others;
-                                            const progress = item.total ? (item.current / item.total) * 100 : 0;
-                                            const isPaid = item.paidMonths && item.paidMonths[currentMonthKey];
+                                                                                        const isPaid = item.paidMonths && item.paidMonths[currentMonthKey];
 
                                             return (
                                                 <div 
@@ -1567,7 +1530,7 @@ function App() {
             <ExpenseDetailModal
                 isOpen={isDetailModalOpen}
                 onClose={() => setIsDetailModalOpen(false)}
-                expense={expenses.find(e => e.id === selectedExpenseDetail?.id) || selectedExpenseDetail}
+                expense={currentMonthExpenses.find(e => e.id === selectedExpenseDetail?.id) || selectedExpenseDetail}
                 onEdit={(item) => {
                     setIsDetailModalOpen(false);
                     handleEdit(item);
@@ -1590,12 +1553,12 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDark
     if (!isOpen || !expense) return null;
 
     const config = CATEGORY_MAP[expense.category] || CATEGORY_MAP.others;
-    const commitment = ((expense.value / currentIncome) * 100).toFixed(2);
+    const commitment = currentIncome > 0 ? ((expense.value / currentIncome) * 100).toFixed(2) : '0.00';
     const isPaid = expense.paidMonths && expense.paidMonths[currentMonthKey];
     
     // Cálculos de datas
     const dateObj = new Date(expense.date);
-    const day = (expense.dueDay || dateObj.getDate().toString()).padStart(2, '0');
+    const day = String(expense.dueDay || dateObj.getDate()).padStart(2, '0');
     const firstPayment = `${day}/${(dateObj.getMonth() + 1).toString().padStart(2, '0')}/${dateObj.getFullYear()}`;
     
     // Para parcelados, calcular a última parcela
@@ -1607,7 +1570,7 @@ const ExpenseDetailModal = ({ isOpen, onClose, expense, onEdit, onDelete, isDark
         // current no banco é sempre 1; usamos (total - 1) para chegar à última
         lastDate.setDate(1); // evita salto de mês em dias como 31
         lastDate.setMonth(lastDate.getMonth() + (expense.total - 1));
-        lastDate.setDate(parseInt(day) || 1);
+        lastDate.setDate(Math.min(parseInt(day) || 1, new Date(lastDate.getFullYear(), lastDate.getMonth() + 1, 0).getDate()));
         lastPayment = `${day}/${(lastDate.getMonth() + 1).toString().padStart(2, '0')}/${lastDate.getFullYear()}`;
     }
 
