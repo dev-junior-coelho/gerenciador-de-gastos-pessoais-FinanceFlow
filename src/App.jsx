@@ -144,7 +144,7 @@ const PricingModal = ({ isOpen, onClose, isPremium }) => {
     );
 };
 
-const CategoryReportModal = ({ isOpen, onClose, category, expenses, selectedDate, isDarkMode }) => {
+const CategoryReportModal = ({ isOpen, onClose, category, expenses, isDarkMode }) => {
     if (!isOpen || !category) return null;
 
     const config = CATEGORY_MAP[category];
@@ -231,6 +231,7 @@ function App() {
     const [authLoading, setAuthLoading] = useState(true);
     const [loadingExpenses, setLoadingExpenses] = useState(false);
     const [expenses, setExpenses] = useState([]);
+    const [income, setIncome] = useState({ default: 0, exceptions: {} });
 
     useEffect(() => {
         let unsubscribeExpenses = () => {};
@@ -265,7 +266,7 @@ function App() {
                 const incomeRef = doc(db, `users/${currentUser.uid}/config/income`);
                 unsubscribeIncome = onSnapshot(incomeRef, (docSnap) => {
                     if (docSnap.exists()) {
-                        setIncome({ default: 0, exceptions: {}, ...docSnap.data(), exceptions: docSnap.data().exceptions || {} });
+                        setIncome({ ...docSnap.data(), default: docSnap.data().default ?? 0, exceptions: docSnap.data().exceptions || {} });
                     } else {
                         setIncome({ default: 0, exceptions: {} });
                     }
@@ -284,7 +285,6 @@ function App() {
         };
     }, []);
 
-    const [income, setIncome] = useState({ default: 0, exceptions: {} });
     const [isEditingIncome, setIsEditingIncome] = useState(false);
     const [tempIncome, setTempIncome] = useState('');
     const [readNotifications, setReadNotifications] = useState(() => {
@@ -399,19 +399,6 @@ function App() {
             await setDoc(doc(db, `users/${user.uid}/config/income`), newIncome);
         } catch (error) {
             console.error("Error saving income: ", error);
-        }
-    };
-
-    const handleResetIncome = async () => {
-        if (!user) return;
-        const newIncome = { ...income, exceptions: { ...income.exceptions } };
-        delete newIncome.exceptions[currentMonthKey];
-
-        setIncome(newIncome);
-        try {
-            await setDoc(doc(db, `users/${user.uid}/config/income`), newIncome);
-        } catch (error) {
-            console.error("Error resetting income: ", error);
         }
     };
 
@@ -592,7 +579,8 @@ function App() {
 
         try {
             if (editingId) {
-                const { createdAt, ...updateData } = expenseData;
+                const updateData = { ...expenseData };
+                delete updateData.createdAt;
                 await updateDoc(doc(db, `users/${user.uid}/expenses`, editingId), updateData);
             } else {
                 await addDoc(collection(db, `users/${user.uid}/expenses`), expenseData);
@@ -1151,7 +1139,7 @@ function App() {
                                         </ResponsiveContainer>
                                     </div>
                                     <div className="flex-1 overflow-y-auto no-scrollbar pr-2 space-y-1.5 min-h-[160px]">
-                                        {chartData.map((entry, index) => (
+                                        {chartData.map((entry) => (
                                             <button
                                                 key={entry.key}
                                                 onClick={() => {
@@ -1514,7 +1502,6 @@ function App() {
                 onClose={() => setIsReportModalOpen(false)}
                 category={selectedCategory}
                 expenses={currentMonthExpenses}
-                selectedDate={selectedDate}
                 isDarkMode={isDarkMode}
             />
 
