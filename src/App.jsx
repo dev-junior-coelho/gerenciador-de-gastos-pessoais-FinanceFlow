@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { getMonthKey, monthOrdinal, monthKeyFromOrdinal, monthStartIso, parseMoney, roundMoney, billingMonthForPurchase, paidMonthsBefore, projectExpensesForMonth, upcomingDueNotifications, dueDateForMonth } from './utils/finance';
+import { useState, useMemo, useEffect } from 'react';
+import { getMonthKey, monthOrdinal, monthStartIso, parseMoney, roundMoney, billingMonthForPurchase, paidMonthsBefore, projectExpensesForMonth, upcomingDueNotifications } from './utils/finance';
 import {
     Plus, Trash2, CreditCard, Home, ShoppingCart, Car, Tv,
     Zap, TrendingUp, Calendar, MoreVertical, X, Wallet,
@@ -73,7 +73,7 @@ const PricingModal = ({ isOpen, onClose, isPremium }) => {
                 'Suporte Prioritário VIP'
             ],
             current: isPremium,
-            buttonText: isPremium ? 'Seu Plano Ativo' : 'Evoluir para o Pro',
+            buttonText: isPremium ? 'Seu Plano Ativo' : 'Em breve',
             highlight: true,
             tag: 'Mais Popular'
         }
@@ -123,12 +123,9 @@ const PricingModal = ({ isOpen, onClose, isPremium }) => {
                             </ul>
 
                             <button
-                                disabled={plan.current}
+                                disabled={true}
                                 onClick={() => {
-                                    if (!plan.current && plan.highlight) {
-                                        // Futura integração com Stripe/MercadoPago
-                                        alert('Simulação: Redirecionando para o Checkout...');
-                                    }
+                                    // Checkout indisponível até existir integração de pagamento.
                                 }}
                                 className={`w-full py-5 rounded-[22px] font-black uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-3 ${plan.current ? 'bg-white/5 text-slate-500 border border-white/5 cursor-not-allowed' : plan.highlight ? 'hbo-button shadow-xl shadow-purple-600/20 hover:shadow-purple-600/40 text-sm' : 'bg-white/10 hover:bg-white/20 text-white border border-white/10 text-sm'}`}
                             >
@@ -140,7 +137,7 @@ const PricingModal = ({ isOpen, onClose, isPremium }) => {
                 </div>
                 
                 <p className="text-center mt-12 text-[10px] font-bold text-slate-500 uppercase tracking-widest max-w-md mx-auto leading-relaxed">
-                    Pagamento 100% seguro processado via criptografia de ponta. Cancelamento fácil a qualquer momento.
+                    Assinaturas premium ainda não disponíveis.
                 </p>
             </div>
         </div>
@@ -299,7 +296,7 @@ function App() {
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [filterType, setFilterType] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
-    const [isPremium, setIsPremium] = useState(false);
+    const isPremium = false;
     const [isPricingModalOpen, setIsPricingModalOpen] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState(null);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
@@ -382,13 +379,6 @@ function App() {
         newDate.setDate(1);
         newDate.setMonth(newDate.getMonth() + offset);
         setSelectedDate(newDate);
-    };
-
-    const handleIncomeChange = (e) => {
-        // Máscara monetária simples
-        const value = e.target.value.replace(/\D/g, "");
-        const numericValue = value ? parseInt(value) / 100 : 0;
-        setTempIncome(numericValue.toString());
     };
 
     const saveIncome = async () => {
@@ -1488,6 +1478,7 @@ function App() {
                                     
                                     if (isClosed) {
                                         const nextMonth = new Date();
+                                        nextMonth.setDate(1);
                                         nextMonth.setMonth(nextMonth.getMonth() + 1);
                                         const nextMonthName = nextMonth.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
